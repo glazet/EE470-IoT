@@ -1,0 +1,112 @@
+#include <Arduino.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <ArduinoJson.h> 
+
+// GPIO where i/p and o/p are
+const int oneWireBus = D4;   
+const int analogPin = A0;
+const int button = D0;  
+
+// WiFi connection info
+const char* ssid     = "TKSwifi"; // hotspot: Trent's iPhone   Home: TKSwifi
+const char* password = "TheBennettBitches"; // hotspot: shanks447   Home: TheBennettBitches
+
+// Needed URL's
+String url     = "https://timeapi.io/api/Time/current/zone?timeZone=America/Los_Angeles"; // for time
+String urlDB     = "https://trentglaze.000webhostapp.com/PHPCRUD/firstphp_db_insert.php"; // for DB
+
+String data1   = "?node_name=node_1&temperature="; // currently empty
+String data2   = "&time_received=";
+String data3   = "&humidity=";
+
+// setting constants to 0
+int sensorVal = 0;
+int trigger = 0;
+
+// Setup a oneWire instance to communicate with any OneWire devices
+OneWire oneWire(oneWireBus);
+
+// Pass our oneWire reference to Dallas Temperature sensor 
+DallasTemperature sensors(&oneWire);
+
+DynamicJsonDocument doc(1024);
+
+void setup() {
+  pinMode(oneWireBus, INPUT); //Temp sensor
+  pinMode(analogPin, INPUT); //photoresistor
+  pinMode(button, INPUT); //button
+  // Start the Serial Monitor
+  Serial.begin(9600);
+  sensors.begin();
+
+  // (A) Start connecting to the WiFi
+  Serial.println("Connecting to WiFi"); 
+  WiFi.begin(ssid, password); // Connection to WiFi Starts until status()=WL_CONNECTED
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    Serial.print("."); // waiting to get connected
+  }
+  
+}
+
+void loop() {
+  char command;
+  trigger = digitalRead(button);
+
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient https;
+
+    String fullUrl = url; // preparing the full URL
+    //Serial.println("Requesting: --> " + fullUrl);
+    if (trigger == LOW){
+      if (https.begin(client, fullUrl)) { // start the connection 1=started / 0=failed
+
+        int httpCode = https.GET(); // choose GET or POST method
+        
+
+        //gather sensor data
+        sensorVal = analogRead(analogPin);
+        float voltage = sensorVal * (3.3 / 1023.0); // Convert the analog reading to voltage
+        float lux = 6457*exp(-2.68 * voltage); // Convert voltage to lux value
+    
+        sensors.requestTemperatures(); 
+        float temperatureC = sensors.getTempCByIndex(0); // Convert digtal data to temp value
+        
+        //Serial.println("Response code <--: " + String(httpCode)); // print response code: e.g.,:200
+
+        if (httpCode > 0) {
+          // Serial.println(https.getString()); // this is the content of the get request received
+          deserializeJson(doc,https.getString()); // deserialize the JSON file
+          deserializeJson(doc,https.getString()); // deserialize the JSON format into keys and values
+          String mytime = doc["dateTime"]; // get the value associated with the dataTime key
+          String mytimeFormat = mytime.substring(0, 10) + " " + mytime.substring(11, 19);
+
+          Serial.println(mytimeFormat); // something like 2022-10-25T21:03:44.1790514
+          Serial.print(lux); // print the lux
+          Serial.println(" Lux");
+          Serial.print(temperatureC); // print temp in C
+          Serial.println("ºC");
+
+          String urlSend = urlDB + data1 + temperatureC + data2 + mytimeFormat + data3 + lux;
+          Serial.print(urlSend);
+
+          if (https.begin(client, urlSend)) { // start the connection 1=started / 0=failed
+            int httpPOST = https.POST(urlSend); // need to include URL
+          }
+        }
+
+        https.end(); // end of request
+      } 
+      else {
+          Serial.printf("[HTTPS] Unable to connect\n");
+      }
+    }
+  }
+  delay(1000); // delay between each REQUEST to the server
+}
