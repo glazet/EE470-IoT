@@ -11,8 +11,8 @@ const int analogPin = A0;
 const int button = D0;  
 
 // WiFi connection info
-const char* ssid     = "TKSwifi"; // hotspot: Trent's iPhone   Home: TKSwifi
-const char* password = "TheBennettBitches"; // hotspot: shanks447   Home: TheBennettBitches
+const char* ssid     = ""; // 
+const char* password = ""; // 
 
 // Needed URL's
 String url     = "https://timeapi.io/api/Time/current/zone?timeZone=America/Los_Angeles"; // for time
